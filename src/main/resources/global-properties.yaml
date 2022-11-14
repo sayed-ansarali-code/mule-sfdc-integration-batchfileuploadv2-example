@@ -1,0 +1,6 @@
+batch:
+  size: "2"
+sfdc:
+  username: your-salesforce-user-name
+  password: your-salesforce-password
+  securitytoken: your-salesforce-security-token

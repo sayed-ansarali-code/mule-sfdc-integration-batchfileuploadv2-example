@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	
+	<configuration-properties file="global-properties.yaml"/>
+	
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="621430b0-d219-4582-9580-1514f131e5eb" >
+		<salesforce:basic-connection username="${sfdc.username}" password="${sfdc.password}" securityToken="${sfdc.securitytoken}" />
+	</salesforce:sfdc-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="d7877eb9-15f2-4567-88f5-8e20d022e7b7" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="mule-sfdc-integration-batchfileuploadv2-exampleFlow" doc:id="8baf21ad-6bd9-4e4e-a79f-803aa1569a58" >
+		<http:listener doc:name="Listener" doc:id="9d99186f-fca7-424b-8122-d154dce969da" config-ref="HTTP_Listener_config" path="/start"/>
+		<file:list doc:name="List" doc:id="8879cbae-ae5c-4c32-a291-f49f30ea3181" directoryPath="D:\temp\src" />
+		<batch:job jobName="mule-sfdc-integration-batchfileuploadv2-exampleBatch_Job" doc:id="673bd6ac-1eca-4949-be99-81cae3689158">
+			<batch:history >
+				<batch:expiration maxAge="1" ageUnit="SECONDS" />
+			</batch:history>
+			<batch:process-records >
+				<batch:step name="Batch_Step" doc:id="5738f684-baec-4a0c-8c28-12b0d0922b4d" >
+					<ee:transform doc:name="Transform Message" doc:id="4c91b0ee-885e-4b49-b3ad-48ecbc155a71" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+--- 
+attributes.fileName replace (("[a-zA-Z-.]*") as Regex) with ("")]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="INFO" doc:name="Logger" doc:id="2590e964-289f-402e-a7a9-c9a7f1a5a944" message="#[payload]"/>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="24ddd7d1-b6b4-4053-9359-c874cb593350" size="2">
+						<ee:transform doc:name="Transform Message" doc:id="22cc195f-5842-442b-9c02-dbe48dde7c1f" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+import * from dw::core::Binaries
+output application/java
+---
+vars.records map(record, index) ->
+{
+    PathOnClient: record.attributes.fileName,
+    VersionData: record.payload as Binary {
+        class: "byte[]"
+    }
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<salesforce:upsert objectType="ContentVersion" externalIdFieldName="id" doc:name="Upsert" doc:id="37e19c53-87cc-4d83-a9f4-2be1e2129577" config-ref="Salesforce_Config"/>
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="Batch_Step1" doc:id="989aebec-6951-4ed6-b863-68564c062292" >
+					<file:move doc:name="Move" doc:id="19d34f97-075f-4508-90a8-7860f6be836a" sourcePath="#[attributes.path]" targetPath="D:\temp\dest" />
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="2027d343-fb74-4e3c-85bf-cf0bf7a101fa" message='"OnComplete" ++ [payload]'/>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+</mule>
